@@ -1,0 +1,1 @@
+conda activate mast3r && python add_new_image.py --existing_data /home/jmc/updat3r/output/Baalashamin_3d --new_image /home/jmc/updat3r/data/1_Baalashamin/new_image.jpg --output_dir /home/jmc/updat3r/output/Baalashamin_3d_incremental --step 3

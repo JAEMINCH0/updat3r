@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>간단 3D 모델 비교 뷰어</title>
+  <style>
+    html,body{
+      margin:0;
+      padding:0;
+      height:100%;
+      background:#000;
+      overflow:hidden;
+      color:#fff;
+      font-family:sans-serif;
+    }
+    .viewer{
+      width:100vw;
+      height:50vh; /* 화면 상·하 50%씩 */
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.157.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.157.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 상단 모델 -->
+  <div class="viewer" id="viewer-1"></div>
+  <!-- 하단 모델 -->
+  <div class="viewer" id="viewer-2"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const MODEL_PATHS = {
+      model1: 'output/Baalashamin_3d/scene.glb',
+      model2: 'output/Baalashamin_3d_incremental_trial/final/scene_incremental.glb'
+    };
+
+    // 공통 설정 ------------------------------------
+    const viewers = [
+      {id:'viewer-1', scene:new THREE.Scene(), camera:null, renderer:null, controls:null},
+      {id:'viewer-2', scene:new THREE.Scene(), camera:null, renderer:null, controls:null}
+    ];
+
+    viewers.forEach(v => {
+      v.scene.background = new THREE.Color(0x000000);
+      v.renderer = new THREE.WebGLRenderer({ antialias:true });
+      v.renderer.setPixelRatio(window.devicePixelRatio);
+      document.getElementById(v.id).appendChild(v.renderer.domElement);
+      v.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
+      v.camera.position.set(0,0,10);
+      v.controls = new OrbitControls(v.camera, v.renderer.domElement);
+      v.controls.enableDamping = true;
+      // 라이트 (Ambient + Directional)
+      v.scene.add(new THREE.AmbientLight(0xffffff,0.7));
+      const dir = new THREE.DirectionalLight(0xffffff,1.0);
+      dir.position.set(1,1,1);
+      v.scene.add(dir);
+    });
+
+    // GLB 로드 ------------------------------------
+    const loader = new GLTFLoader();
+    function loadModel(index, path){
+      loader.load(path, gltf=>{
+        const model = gltf.scene;
+        // 재질 설정: DoubleSide 및 지도 sRGB 보정
+        model.traverse(o=>{
+          if(o.isMesh && o.material){
+            o.material.side = THREE.DoubleSide;
+            if(o.material.map){
+              o.material.map.encoding = THREE.sRGBEncoding;
+            }
+          }
+        });
+        // 중심 이동 (카메라·프러스텀 포함 전체)
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+        // 카메라 시야 맞추기
+        const size = box.getSize(new THREE.Vector3()).length();
+        const cam = viewers[index].camera;
+        const fovRad = cam.fov * Math.PI/180;
+        cam.position.z = size / (2*Math.tan(fovRad/2));
+        cam.near = size/1000;
+        cam.far = size*10;
+        cam.updateProjectionMatrix();
+        viewers[index].scene.add(model);
+      },
+      undefined,
+      err=>console.error('모델 로드 실패',err));
+    }
+
+    loadModel(0, MODEL_PATHS.model1);
+    loadModel(1, MODEL_PATHS.model2);
+
+    // 리사이즈 ------------------------------------
+    function resize(){
+      viewers.forEach(v=>{
+        const w = window.innerWidth;
+        const h = window.innerHeight/2;
+        v.renderer.setSize(w,h);
+        v.camera.aspect = w/h;
+        v.camera.updateProjectionMatrix();
+      });
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // 렌더 루프 ------------------------------------
+    function animate(){
+      requestAnimationFrame(animate);
+      viewers.forEach(v=>{
+        v.controls.update();
+        v.renderer.render(v.scene, v.camera);
+      });
+    }
+    animate();
+  </script>
+</body>
+</html>
